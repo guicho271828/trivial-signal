@@ -46,9 +46,9 @@ git clone https://github.com/fukamachi/trivial-signal.git
 (ql:quickload :trivial-signal)
 ```
 
-## Functions
+## Exported Symbols
 
-### signal-handler (signal)
+### [Function] signal-handler (signal)
 
 This returns a signal handler for a signal `SIGNAL`.
 
@@ -60,7 +60,7 @@ This returns a signal handler for a signal `SIGNAL`.
 (signal-handler +sigterm+)
 ```
 
-### (setf signal-handler) (fn signal)
+### [Function] (setf signal-handler) (fn signal)
 
 This sets a signal handler `FN` for a signal `SIGNAL`.
 
@@ -72,15 +72,41 @@ This sets a signal handler `FN` for a signal `SIGNAL`.
           (princ (signal-name signo) *error-output*)))
 ```
 
-### remove-signal-handler (signal)
+### [Function] remove-signal-handler (signal)
 
 This removes a signal handler from a signal `SIGNAL`.
 
-### remove-all-signal-handlers ()
+### [Function] remove-all-signal-handlers ()
 
 This clears all signal handlers.
 
-### signal-name (signo)
+### [Macro] with-signal-handler (signal fn &body forms)
+
+This executes `FORMS` in an environment where a signal handler `FN` for a signal `SIGNAL` is in effect.
+
+```common-lisp
+(with-signal-handler :term (lambda (signo)
+                             (declare (ignore signo))
+                             (sb-ext:exit :abort t))
+  ;; do something.
+  )
+```
+
+### [Macro] signal-handler-bind (bindings &body forms)
+
+This executes `FORMS` in an environment where signal handler bindings are in effect.
+
+```common-lisp
+(signal-handler-bind ((:term (lambda (signo)
+                               (declare (ignore signo))
+                               (sb-ext:exit :abort t)))
+                      (:int  (lambda (signo)
+                               (princ (signal-name signo) *error-output*))))
+  ;; do something.
+  )
+```
+
+### [Function] signal-name (signo)
 
 This returns the name of `SIGNO` as a keyword.
 
@@ -89,7 +115,7 @@ This returns the name of `SIGNO` as a keyword.
 ;=> :TERM
 ```
 
-### signal-number (signame)
+### [Function] signal-number (signame)
 
 This returns the number of `SIGNAME` as an integer.
 

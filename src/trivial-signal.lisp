@@ -9,6 +9,8 @@
   (:export :signal-handler
            :remove-signal-handler
            :remove-all-signal-handlers
+           :with-signal-handler
+           :signal-handler-bind
 
            :signal-name
            :signal-number
@@ -90,3 +92,24 @@
   (when (nth-value 1 (gethash signo *signal-handlers*))
     (remhash signo *signal-handlers*)
     (cffi:foreign-funcall "signal" :int signo :unsigned-long 0)))
+
+(defmacro with-signal-handler (signal fn &body forms)
+  "Execute FORMS in an environment where a signal handler FN for a signal SIGNAL is in effect."
+  (let ((original (gensym "ORIGINAL"))
+        (foundp (gensym "FOUNDP"))
+        (g-signal (gensym "SIGNAL")))
+    `(let* ((,g-signal ,signal))
+       (multiple-value-bind (,original ,foundp)
+           (,original (signal-handler ,g-signal))
+         (setf (signal-handler ,g-signal) ,fn)
+         (unwind-protect (progn ,@forms)
+           (if ,foundp
+               (setf (signal-handler ,g-signal) ,original)
+               (remove-signal-handler ,g-signal)))))))
+
+(defmacro signal-handler-bind (bindings &body forms)
+  "Execute FORMS in an environment where signal handler bindings are in effect."
+  (if bindings
+      `(with-signal-handler ,@(car bindings)
+         (signal-handler-bind ,(cdr bindings) ,@forms))
+      `(progn ,@forms)))

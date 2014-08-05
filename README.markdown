@@ -60,7 +60,7 @@ This returns a signal handler for a signal `SIGNAL`.
 (signal-handler +sigterm+)
 ```
 
-### [Function] (setf signal-handler) (fn signal)
+### [Function] \(setf signal-handler) (fn signal)
 
 This sets a signal handler `FN` for a signal `SIGNAL`.
 

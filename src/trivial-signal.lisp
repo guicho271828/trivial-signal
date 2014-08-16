@@ -104,8 +104,7 @@
         (foundp (gensym "FOUNDP"))
         (g-signal (gensym "SIGNAL")))
     `(let* ((,g-signal ,signal))
-       (multiple-value-bind (,original ,foundp)
-           (,original (signal-handler ,g-signal))
+       (multiple-value-bind (,original ,foundp) (signal-handler ,g-signal)
          (setf (signal-handler ,g-signal) ,fn)
          (unwind-protect (progn ,@forms)
            (if ,foundp

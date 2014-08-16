@@ -46,7 +46,7 @@
                                            (ABRT    6 "abort program (formerly SIGIOT).")
                                            (EMT     7 "emulate instruction executed.")
                                            (FPE     8 "floating-point exception.")
-                                           (KILL    9 "kill program.")
+                                           (KILL    9 "kill program. (cannot be caught or ignored)")
                                            (BUS    10 "bus error.")
                                            (SEGV   11 "segmentation violation.")
                                            (SYS    12 "non-existent system call invoked.")
@@ -69,6 +69,14 @@
                                            (INFO   29 "status request from keyboard.")
                                            (USR1   30 "User defined signal 1.")
                                            (USR2   31 "User defined signal 2."))
+          ;; FIXME: these signals are OS-dependent, and sometimes a single
+          ;; signal has multiple signo.  For example, on Linux USR1 is
+          ;; assigned to 30,10 and 16.  Or, at least it is still possible
+          ;; to specify which the version of POSIX spec it is based on.
+
+          ;; Alternatively, the more reliable way to take the valid signo
+          ;; for each OS is using cffi-grovel, which reads the header file
+          ;; in that system and load the correct value.
              collect `(defconstant ,(intern (format nil "+~A~A+" (string :sig) name)) ,num ,docstring) into defconstants
              collect `(,num ,(intern (symbol-name name) :keyword)) into signal-name-rules
              collect `(,(intern (symbol-name name) :keyword) ,num) into signal-num-rules

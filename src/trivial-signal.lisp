@@ -78,6 +78,11 @@
   (setf *signal-handlers* (make-hash-table :test 'eql))
   (values))
 
+;; FIXME: according to the man page of SIGNAL(2):
+;; ```The  behavior of signal() varies across UNIX versions, and has also
+;; varied historically across different versions of Linux.   Avoid  its
+;; use: use sigaction(2) instead.  See Portability below.'''
+
 (cffi:defcallback signal-handler :void ((signo :int))
   (multiple-value-bind (fn foundp)
       (gethash signo *signal-handlers*)

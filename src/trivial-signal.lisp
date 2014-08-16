@@ -47,6 +47,8 @@
            :+sigusr2+))
 (in-package :trivial-signal)
 
+;;;; hash table of (signo . function)
+
 (defvar *signal-handlers* (make-hash-table :test 'eql))
 
 (defun canonical-signal-arg (signal)
@@ -78,29 +80,36 @@
   (setf *signal-handlers* (make-hash-table :test 'eql))
   (values))
 
+;;;; cffi interfaces
+
 ;; FIXME: according to the man page of SIGNAL(2):
 ;; ```The  behavior of signal() varies across UNIX versions, and has also
 ;; varied historically across different versions of Linux.   Avoid  its
 ;; use: use sigaction(2) instead.  See Portability below.'''
 
-(cffi:defcallback signal-handler :void ((signo :int))
+(cffi:defcallback call-signal-handler-in-lisp :void ((signo :int))
   (multiple-value-bind (fn foundp)
       (gethash signo *signal-handlers*)
     (when foundp
       (funcall fn signo))))
 
 (defun enable-signal-handler (signo)
+  (check-type signo integer)
   (unless (nth-value 1 (gethash signo *signal-handlers*))
-    (cffi:foreign-funcall "signal" :int signo :pointer (cffi:callback signal-handler))))
+    (cffi:foreign-funcall "signal" :int signo :pointer (cffi:callback call-signal-handler-in-lisp))))
 
 (defun disable-signal-handler (signo)
+  (check-type signo integer)
   (when (nth-value 1 (gethash signo *signal-handlers*))
     (remhash signo *signal-handlers*)
     (cffi:foreign-funcall "signal" :int signo :unsigned-long 0)))
 
 (defmacro with-signal-handler (signal fn &body forms)
-  "Execute FORMS in an environment where a signal handler FN for a signal SIGNAL is in effect."
-  (let ((original (gensym "ORIGINAL"))
+  "Execute FORMS in a dynamic environment where a signal handler FN for a
+signal SIGNAL is in effect. The body form is protected against local exits
+by `unwind-protect' in order to ensure that the signal handler is
+unassigned after execution."
+  (let ((original (gensym "ORIGINAL")) ; store the old lisp handler function
         (foundp (gensym "FOUNDP"))
         (g-signal (gensym "SIGNAL")))
     `(let* ((,g-signal ,signal))
@@ -112,7 +121,7 @@
                (remove-signal-handler ,g-signal)))))))
 
 (defmacro signal-handler-bind (bindings &body forms)
-  "Execute FORMS in an environment where signal handler bindings are in effect."
+  "Execute FORMS in a dynamic environment where signal handler bindings are in effect."
   (if bindings
       `(with-signal-handler ,@(car bindings)
          (signal-handler-bind ,(cdr bindings) ,@forms))

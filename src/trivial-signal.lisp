@@ -77,9 +77,9 @@
   "Clear all signal handlers."
   (maphash (lambda (signo fn)
              (declare (ignore fn))
-             (disable-signal-handler signo))
+             (disable-signal-handler signo)
+             (remhash signo *signal-handlers*))
            *signal-handlers*)
-  (setf *signal-handlers* (make-hash-table :test 'eql))
   (values))
 
 ;;;; cffi interfaces

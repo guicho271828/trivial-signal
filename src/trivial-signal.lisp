@@ -69,7 +69,9 @@
 
 (defun remove-signal-handler (signal)
   "Remove a signal handler FN from a signal SIGNAL."
-  (disable-signal-handler (canonical-signal-arg signal)))
+  (let ((signo (canonical-signal-arg signal)))
+    (disable-signal-handler signo)
+    (remhash signo *signal-handlers*)))
 
 (defun remove-all-signal-handlers ()
   "Clear all signal handlers."
@@ -101,7 +103,6 @@
 (defun disable-signal-handler (signo)
   (check-type signo integer)
   (when (nth-value 1 (gethash signo *signal-handlers*))
-    (remhash signo *signal-handlers*)
     (cffi:foreign-funcall "signal" :int signo :unsigned-long 0)))
 
 (defmacro with-signal-handler (signal fn &body forms)

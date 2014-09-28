@@ -64,8 +64,8 @@
   "Set a signal handler FN for a signal SIGNAL."
   (check-type fn (or function symbol))
   (let ((signo (canonical-signal-arg signal)))
-    (enable-signal-handler signo)
-    (setf (gethash signo *signal-handlers*) fn)))
+    (setf (gethash signo *signal-handlers*) fn)
+    (enable-signal-handler signo)))
 
 (defun remove-signal-handler (signal)
   "Remove a signal handler FN from a signal SIGNAL."

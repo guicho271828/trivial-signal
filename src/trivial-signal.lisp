@@ -8,7 +8,7 @@
                 :callback)
   (:export :with-signal-handler
            :signal-handler-bind
-           :*toplevel-signal-handlers*
+           :signal-handler
 
            :unix-signal
            :signo
@@ -93,12 +93,37 @@ list (alist signo (list functions)) == list (list (cons signo (list functions)))
 (defvar *toplevel-signal-handlers* nil "Toplevel handler")
 (defvar *signal-handler-hierarchy* nil "Nested cons-tree of signal handlers")
 
+;; utility
+(defun assocdr (item alist) (cdr (assoc item alist)))
+
 (defun canonical-signal-arg (signal)
   (if (integerp signal)
       signal
       (signal-number signal)))
 
-;; you no longer able to explicitly access the current handlers.
+;; you no longer able to explicitly access the current handlers.  However,
+;; instead, you can retrieve the toplevel handlers (analogous to calling
+;; *debugger-hook* before invoking a debugger when unhandled error has
+;; occured.)
+;; NOTE: unlike normal signal-handlers, toplevel handlers can hold at most one
+;; handler for the same signal.
+(defun signal-handler (signal)
+  "Returns the toplevel signal handler for a signal SIGNAL."
+  (first (assocdr (canonical-signal-arg signal)
+                  *toplevel-signal-handlers*)))
+
+(defun (setf signal-handler) (fn signal)
+  "Set the toplevel signal handler FN for a signal SIGNAL.
+Toplevel handlers can hold at most one handler for the same signal."
+  (check-type fn (or function symbol)) ; nil is a symbol
+  (let* ((signo (canonical-signal-arg signal))
+         (cons (assoc (canonical-signal-arg signal)
+                      *toplevel-signal-handlers*)))
+    (if cons
+        (setf (cdr cons) (list fn)) ; same interface as *signal-handler-hierarchy*
+        (push (list signo fn) *toplevel-signal-handlers*))))
+
+;; To remove the toplevel signal handler, (setf (signal-handler signo) nil) .
 
 ;;;; cffi interfaces
 
@@ -120,8 +145,6 @@ list (alist signo (list functions)) == list (list (cons signo (list functions)))
   (:report (lambda (c s)
              (format s "~&received ~A~%" (signal-name (signo c))))))
 
-;; utility
-(defun assocdr (item alist) (cdr (assoc item alist)))
 (cffi:defcallback call-signal-handler-in-lisp :void ((signo :int))
   #+debug
   (bt:with-lock-held (*print-lock*)

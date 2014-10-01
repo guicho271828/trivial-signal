@@ -80,6 +80,8 @@
              collect `(defconstant ,(intern (format nil "+~A~A+" (string :sig) name)) ,num ,docstring) into defconstants
              collect `(,num ,(intern (symbol-name name) :keyword)) into signal-name-rules
              collect `(,(intern (symbol-name name) :keyword) ,num) into signal-num-rules
+             collect `(,num ,(intern (format nil "SIG~A" name) :keyword)) into signal-name-rules
+             collect `(,(intern (format nil "SIG~A" name) :keyword) ,num) into signal-num-rules
              finally
                 (return
                   `((defun signal-name (signo)

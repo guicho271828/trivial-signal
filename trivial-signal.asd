@@ -7,7 +7,7 @@
   :version "0.1.0"
   :author "Eitaro Fukamachi"
   :license "Public Domain"
-  :depends-on (:cffi)
+  :depends-on (:cffi :bordeaux-threads)
   :components ((:module "src"
                 :components
                 ((:file "trivial-signal" :depends-on ("signals"))

@@ -64,20 +64,22 @@
   "Set a signal handler FN for a signal SIGNAL."
   (check-type fn (or function symbol))
   (let ((signo (canonical-signal-arg signal)))
-    (enable-signal-handler signo)
-    (setf (gethash signo *signal-handlers*) fn)))
+    (setf (gethash signo *signal-handlers*) fn)
+    (enable-signal-handler signo)))
 
 (defun remove-signal-handler (signal)
   "Remove a signal handler FN from a signal SIGNAL."
-  (disable-signal-handler (canonical-signal-arg signal)))
+  (let ((signo (canonical-signal-arg signal)))
+    (disable-signal-handler signo)
+    (remhash signo *signal-handlers*)))
 
 (defun remove-all-signal-handlers ()
   "Clear all signal handlers."
   (maphash (lambda (signo fn)
              (declare (ignore fn))
-             (disable-signal-handler signo))
+             (disable-signal-handler signo)
+             (remhash signo *signal-handlers*))
            *signal-handlers*)
-  (setf *signal-handlers* (make-hash-table :test 'eql))
   (values))
 
 ;;;; cffi interfaces
@@ -101,7 +103,6 @@
 (defun disable-signal-handler (signo)
   (check-type signo integer)
   (when (nth-value 1 (gethash signo *signal-handlers*))
-    (remhash signo *signal-handlers*)
     (cffi:foreign-funcall "signal" :int signo :unsigned-long 0)))
 
 (defmacro with-signal-handler (signal fn &body forms)

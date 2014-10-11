@@ -97,7 +97,7 @@ signals can be captured. This is because those implementations use signals
 internally for their own sake (such as thread manipulation). For example,
 
 + SBCL on x86_64 can capture 4-8, 10, 11, 16, 18, 21, 22, 30, 31 (maybe inaccurate?)
-+ CCL on x86_64 can capture 20-22, 27, 29
++ CCL on x86_64 can capture 1,2,3,6,8,10,12-14,16-18,21-24,26-29,31
 
 # API
 ## sigspec API

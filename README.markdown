@@ -99,6 +99,8 @@ internally for their own sake (such as thread manipulation). For example,
 + SBCL on x86_64 can capture 4-8, 10, 11, 16, 18, 21, 22, 30, 31 (maybe inaccurate?)
 + CCL on x86_64 can capture 1,2,3,6,8,10,12-14,16-18,21-24,26-29,31
 
+To see which signals works on your environment, see [TESTING.org](https://github.com/guicho271828/trivial-signal/blob/master/TESTING.org)
+
 # API
 ## sigspec API
 

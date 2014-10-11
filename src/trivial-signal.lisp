@@ -152,9 +152,9 @@ Toplevel handlers can hold at most one handler for the same signal."
 
 (cffi:defcallback call-signal-handler-in-lisp :void ((signo :int))
   ;; in SBCL, singals are sent only to the main thread.
-  ;; in CCL, signals are sometimes sent to all threads (subprocesses)
-  ;; (in which case call-signal-handler-in-lisp is called multiple times)
-  ;; and sometimes only to the main thread.
+  ;; in CCL, sometimes signals are also sent to the other threads (subprocesses)
+  ;; (in which case call-signal-handler-in-lisp is called multiple times.)
+  ;; (Is this because CCL uses PTHREAD_SIGNAL internally?)
   (when
       #+(or sbcl ccl)
       (string=

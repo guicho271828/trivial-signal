@@ -1,31 +1,37 @@
 
+#+nil
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (pushnew :debug *features*))
-(ql:quickload :trivial-signal)
+
+(asdf:compile-system (asdf:find-system :trivial-signal))
+;; (ql:quickload :trivial-signal)
 
 (defpackage :ts-test-binding
   (:use :cl :trivial-signal :bt))
 (in-package :ts-test-binding)
 
-(format t "ready~%")
+;;;; prepare
 
-;; (handler-bind ((error (lambda (c) (print :hi!)))
-;;                (error (lambda (c) (print :hi!))))
-;;   (error "cruel!"))
-
+(format t "~&Preparing...")
 (defvar *shared* *standard-output*)
 (defvar *print-lock* (bt:make-lock "print-test"))
 (defun lprint (thing)
-  #+nil
-  (bt:with-lock-held (*print-lock*)
-    (print thing *shared*))
   (print thing *shared*))
 
 (defvar *pid*
     #+sbcl (sb-posix:getpid)
     #+ccl (ccl::getpid))
-(defvar *signo* 30)
-(lprint *pid*) (force-output)
+(defvar *signo* 29)
+(format t "~&main thread pid: ~a" *pid*)
+
+(defun waitloop (i)
+  ;;(lprint trivial-signal::*signal-handler-hierarchy*)
+  (loop (sleep 1)
+        (format t "waiting signal ~a (step ~a) on ~a" *signo* i (bt:current-thread))))
+
+(defvar *runner*)
+
+;;;; macro version
 
 (defmacro %run1 ()
   `(tagbody
@@ -33,67 +39,79 @@
          ((,*signo* (lambda (c) (lprint :first)))
           (,*signo* (lambda (c) (lprint :escaping) (go :escape)))
           (,*signo* (lambda (c) (lprint :this-should-not-be-called))))
-       (lprint trivial-signal::*signal-handler-hierarchy*)
-       (loop (sleep 1)
-             (lprint "waiting signal (step 1)")))
+       (waitloop 1))
      :escape
-     (lprint :success)))
+     (lprint :success1)))
 (defmacro %run2 ()
   `(tagbody
      (signal-handler-bind
          ((,*signo* (lambda (c)  (lprint :escaping) (go :escape))))
-       
-       (loop (sleep 1)
-             (lprint trivial-signal::*signal-handler-hierarchy*)
-             (lprint "waiting signal (step 2)")))
+       (waitloop 2))
      :escape
-     (lprint :success)))
+     (lprint :success2)))
 (defmacro %run3 ()
   `(tagbody
      (signal-handler-bind ((,*signo* (lambda (c) (lprint :should-not-be-called))))
        (signal-handler-bind ((,*signo* (lambda (c) (lprint :escaping) (go :escape))))
          (signal-handler-bind ((,*signo* (lambda (c) (lprint :inner))))
-           (lprint trivial-signal::*signal-handler-hierarchy*)
-           (loop (sleep 1)
-                 (lprint "waiting signal (step 3)")
-                 (lprint (bt:current-thread))))))
+           (waitloop 3))))
      :escape
-     (lprint :success)))
+     (lprint :success3)))
+
+;;;; dynamic version
+
+(defun run1 ()
+  (tagbody
+    (call-signal-handler-bind
+     `((,*signo* ,(lambda (c) (lprint :first))
+                 ,(lambda (c) (lprint :escaping) (go :escape))
+                 ,(lambda (c) (lprint :this-should-not-be-called))))
+     (lambda () (waitloop 4)))
+    :escape
+    (lprint :success4)))
+(defun run2 ()
+  (tagbody
+    (call-signal-handler-bind
+     `((,*signo* ,(lambda (c)  (lprint :escaping) (go :escape))))
+     (lambda () (waitloop 5)))
+    :escape
+    (lprint :success5)))
+(defun run3 ()
+  (tagbody
+    (call-signal-handler-bind
+     `((,*signo* ,(lambda (c) (lprint :should-not-be-called))))
+     (lambda ()
+       (call-signal-handler-bind
+        `((,*signo* ,(lambda (c) (lprint :escaping) (go :escape))))
+        (lambda ()
+          (call-signal-handler-bind
+           `((,*signo* ,(lambda (c) (lprint :inner))))
+           (lambda () (waitloop 6)))))))
+    :escape
+    (lprint :success6)))
+
+;;;; run
+
+(format t "~&Ready")
+
+(setf *runner* (make-thread
+                (lambda ()
+                  (lprint "testing static version")
+                  (%run1) (%run2) (%run3)
+                  (run1) (run2) (run3))))
 
 (defvar *killer*
     (make-thread (lambda ()
                    (loop
-                     (handler-bind ((trivial-signal::unix-signal
-                                     (lambda (c)
-                                       (lprint :killer-thread-ignore)
-                                       (lprint (find-restart 'ignore))
-                                       (invoke-restart
-                                        (find-restart 'ignore)))))
-                       (sleep 3)
-                       (format *shared* "~&sending signal ~a to pid ~a"
-                               *signo* *pid*)
-                       (force-output *shared*)
-                       #+sbcl (sb-posix:kill *pid* *signo*)
-                       #+ccl (ccl:run-program "kill" (list (format nil "-~a" *signo*)
-                                                           (princ-to-string *pid*))))))
-                 :name "killer"))
+                     (sleep 3)
+                     (format *shared* "~&sending signal ~a to pid ~a"
+                             *signo* *pid*)
+                     (force-output *shared*)
+                     #+sbcl (sb-posix:kill *pid* *signo*)
+                     #+ccl (ccl:run-program "kill" (list (format nil "-~a" *signo*)
+                                                         (princ-to-string *pid*)))))
+                 :name "killer")
+  "a thread that periodically send *singo* to *pid*")
 
-(defun run1 () (%run1))
-(defun run2 () (%run2))
-(defun run3 () (%run3))
-(defun run () (run1) (run2) (run3))
-
-(defvar *runner*
-    (make-thread #'run :name "runner"))
 
 (bt:join-thread *runner*)
-;; (dolist (*signo* '(2 15 24 30)) ; int, term, xcpu, usr1
-;;   (eval '(run)))
-
-
-
-
-;; (tagbody
-;;   (make-thread (lambda () (go :escape)))
-;;   :escape
-;;   (print :hi!))

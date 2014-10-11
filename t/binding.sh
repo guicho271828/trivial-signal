@@ -1,18 +1,21 @@
 #!/bin/bash
 
-run_test (){
+maketest (){
     if which $1
     then
-        $@ binding.lisp &
-        pid=$!
-        sleep 15
-        echo "killing $pid with -9"
-        kill -9 $pid
+        timeout --kill-after 5 25 $@
     else
         echo "$1 not installed"
     fi
 }
 
-run_test sbcl --quit --load
-run_test ccl --batch --load
+test1 (){
+    maketest $@ binding.lisp
+}
 
+for t in test1
+do
+    echo "running $t"
+    $t sbcl --quit --disable-debugger --load
+    $t ccl --batch --load
+done

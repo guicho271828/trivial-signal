@@ -8,6 +8,7 @@
                 :callback)
   (:export :with-signal-handler
            :signal-handler-bind
+           :call-signal-handler-bind
            :signal-handler
 
            :unix-signal
@@ -176,10 +177,7 @@ Toplevel handlers can hold at most one handler for the same signal."
         #+ccl
         (print (ccl::lisp-thread.interrupt-functions th)))
       (when (gethash th *listener-threads*)
-        (bt:interrupt-thread
-         th
-         (lambda ()
-           (invoke-handlers signo)))))))
+        (bt:interrupt-thread th #'invoke-handlers signo)))))
 
 (defun invoke-handlers (signo)
   "Handler-invoking procedure per thread"
@@ -234,66 +232,91 @@ Toplevel handlers can hold at most one handler for the same signal."
 (defvar *listening-signal-p* nil
   "per-thread flag for whether the current thread is listening signals")
 
+(defun call-signal-handler-bind (new-signal-handlers fn)
+  "Execute FN in a dynamic environment where signal handler bindings are
+in effect. new-signal-handlers is a cons tree of ((signo handler ...) ...)
+
+note that, trivial-signal only considers the first appearance of (signo handlers...)
+with matching signo in the same layer. For example,
+
+    (call-signal-handler-bind
+     `((,*signo* ,(lambda (c) (lprint :first))
+                 ,(lambda (c) (lprint :escaping) (go :escape))
+                 ,(lambda (c) (lprint :this-should-not-be-called))))
+     (lambda () ...))
+
+is okay but
+
+    (call-signal-handler-bind
+     `((,*signo* ,(lambda (c) (lprint :first)))
+       (,*signo* ,(lambda (c) (lprint :escaping) (go :escape)))
+       (,*signo* ,(lambda (c) (lprint :this-should-not-be-called))))
+     (lambda () ... ))
+
+is incorrect (2nd and 3rd handlers are ignored).
+If you want to do it wrap the main code in (lambda () ...)
+ with another call-signal-handler-bind.
+"
+  (let* ((next-enabled-signals (%next-enabled-signals new-signal-handlers))
+         (new-hierarchy (cons new-signal-handlers *signal-handler-hierarchy*))
+         (*currently-enabled-signals*
+          (append next-enabled-signals *currently-enabled-signals*))
+         ;; ^^^ this is safe because the only function dependent on
+         ;; *currently-enabled-signals* is %next-enabled-signals.
+         (*signal-handler-hierarchy* new-hierarchy))
+    ;; <-- what happens if an interrupt for a signal X occurs right here?
+    ;;   (== the new hierarchy is set,
+    ;;       but the newest handlers are not enabled yet)
+    ;; 
+    ;; old layers | new layer | behavior
+    ;; -----------+-----------+--------
+    ;; disabled   | enabled   | interrupts are ignored : correct
+    ;; enabled    | enabled   | new handlers are in effect : correct
+    ;;            |           | because they are already enabled
+    (unwind-protect
+        (progn
+          (unless *listening-signal-p* ;; called only on the toplevel stack
+            #+debug
+            (bt:with-lock-held (*handler-lock*)
+              (format t "~&Registering the current thread as a listener: ~a"
+                      (bt:current-thread))
+              (force-output))
+            (bt:with-lock-held (*listener-threads-lock*)
+              (setf (gethash (bt:current-thread) *listener-threads*) t)))
+          ;; Only the additional signals are enabled.  It is possible
+          ;; that a new signal is received while partly enabling these
+          ;; signals before running ,@forms ...
+          #+debug
+          (bt:with-lock-held (*handler-lock*)
+            (format t "~&Enabling signal handlers: ~a"
+                    (bt:current-thread)))
+          (%enable-all-signal-handlers next-enabled-signals)
+          (let* ((*listening-signal-p* t))
+            #+ccl
+            (ccl:with-interrupts-enabled
+              (funcall fn))
+            #+sbcl
+            (funcall fn)))
+      ;; however in any cases, the partly/fully enabled singals are
+      ;; correctly disabled.
+      #+debug
+      (bt:with-lock-held (*handler-lock*)
+        (format t "~&Disabling signal handlers: ~a" (bt:current-thread)))
+      (%disable-all-signal-handlers next-enabled-signals)
+      (unless *listening-signal-p* ;; called only on the toplevel stack
+        #+debug
+        (bt:with-lock-held (*handler-lock*)
+          (format t "~&Removng the current thread as a listener: ~a"
+                  (bt:current-thread)))
+        (bt:with-lock-held (*listener-threads-lock*)
+          (remhash (bt:current-thread) *listener-threads*))))))
+
 (defmacro signal-handler-bind (bindings &body forms)
   "Execute FORMS in a dynamic environment where signal handler bindings are
 in effect."
-  (let ((next-enabled-signals (gensym))
-        (new-signal-handlers (gensym))
-        (new-hierarchy (gensym))
-        (th (gensym "BODY")))
-    ;; we need a special care in these codes because it handles
-    ;; asynchronous operations
-    `(let* ((,new-signal-handlers ,(%inline-bindings bindings))
-            (,next-enabled-signals (%next-enabled-signals ,new-signal-handlers))
-            (,new-hierarchy (cons ,new-signal-handlers *signal-handler-hierarchy*))
-            (*currently-enabled-signals*
-             (append ,next-enabled-signals
-                     *currently-enabled-signals*))
-            ;; ^^^ this is safe because the only function dependent on
-            ;; *currently-enabled-signals* is %next-enabled-signals.
-            (*signal-handler-hierarchy* ,new-hierarchy))
-       ;; <-- what happens if an interrupt for a signal X occurs right here?
-       ;;   (== the new hierarchy is set,
-       ;;       but the newest handlers are not enabled yet)
-       ;; 
-       ;; old layers | new layer | behavior
-       ;; -----------+-----------+--------
-       ;; disabled   | enabled   | interrupts are ignored : correct
-       ;; enabled    | enabled   | new handlers are in effect : correct
-       ;;            |           | because they are already enabled
-       (unwind-protect
-           (progn
-             (unless *listening-signal-p* ;; called only on the toplevel stack
-               #+debug
-               (bt:with-lock-held (*handler-lock*)
-                 (format t "~&Registering the current thread as a listener: ~a"
-                         (bt:current-thread))
-                 (force-output))
-               (bt:with-lock-held (*listener-threads-lock*)
-                 (setf (gethash (bt:current-thread) *listener-threads*) t)))
-             ;; Only the additional signals are enabled.  It is possible
-             ;; that a new signal is received while partly enabling these
-             ;; signals before running ,@forms ...
-             #+debug
-             (bt:with-lock-held (*handler-lock*)
-               (format t "~&Enabling signal handlers: ~a"
-                       (bt:current-thread)))
-             (%enable-all-signal-handlers ,next-enabled-signals)
-             (let* ((*listening-signal-p* t))
-               ,@forms))
-         ;; however in any cases, the partly/fully enabled singals are
-         ;; correctly disabled.
-         #+debug
-         (bt:with-lock-held (*handler-lock*)
-           (format t "~&Disabling signal handlers: ~a" (bt:current-thread)))
-         (%disable-all-signal-handlers
-          ,next-enabled-signals)
-         (unless *listening-signal-p* ;; called only on the toplevel stack
-           #+debug
-           (bt:with-lock-held (*handler-lock*)
-             (format t "~&Removng the current thread as a listener: ~a" (bt:current-thread)))
-           (bt:with-lock-held (*listener-threads-lock*)
-             (remhash (bt:current-thread) *listener-threads*)))))))
+  `(call-signal-handler-bind
+    ,(%inline-bindings bindings)
+    (lambda () ,@forms)))
 
 (defun group-bindings (bindings)
   "returns an alist of ((name handler1 handler2 ...)=cons ...)"

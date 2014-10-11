@@ -1,0 +1,12 @@
+
+* test
+
+To test if the library works, run =t/binding.sh= and see =:SUCESS1=
+through =:SUCESS6= are printed.
+
+Requirements: path to =sbcl= and =ccl=.
+
+* which signal can be used in my environment?
+
+run =t/check-mask.sh=. It reports the signals that can be correctly trapped
+by =trivial-signal=.

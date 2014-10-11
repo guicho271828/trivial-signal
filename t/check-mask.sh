@@ -24,7 +24,7 @@ sub (){
 }
 
 aggregate (){
-    for f in *.$1
+    for f in $2.*.$1
     do
         echo $(basename $f .$1) >> $2.$1_unsrt
     done

@@ -10,7 +10,8 @@
            :signal-handler-bind
            :call-signal-handler-bind
            :signal-handler
-
+           :remove-signal-handler
+           :remove-all-signal-handlers
            :unix-signal
            :signo
 
@@ -124,7 +125,14 @@ Toplevel handlers can hold at most one handler for the same signal."
         (setf (cdr cons) (list fn)) ; same interface as *signal-handler-hierarchy*
         (push (list signo fn) *toplevel-signal-handlers*))))
 
-;; To remove the toplevel signal handler, (setf (signal-handler signo) nil) .
+(defun remove-signal-handler (signal)
+  "Deprecated.
+To remove the toplevel signal handler, (setf (signal-handler signo) nil) ."
+  (setf (signal-handler signal) nil))
+
+(defun remove-all-signal-handlers ()
+  "Removes all toplevel signal handlers"
+  (setf *toplevel-signal-handlers* nil))
 
 ;;;; cffi interfaces
 

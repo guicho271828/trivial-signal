@@ -1,110 +1,118 @@
 # trivial-signal
 
-Trivial-signal is a Common Lisp library provides unix signal handling feature.
+Trivial-signal is a Common Lisp UNIX signal handling library.
 
-## Usage
+**News** : now equipped with nested signal handling capability &
+ multithreads! See `Threading Policy`` below. (Masataro Asai)
 
-```common-lisp
-(use-package :trivial-signal)
+**News** : Maintainer has changed. Thanks Fukamachi! (Masataro Asai)
 
-(defun exit-on-signal (signo)
-  (format *error-output* "~&received ~A~%" (signal-name signo))
-  (sb-ext:exit :code 1 :abort t))
+**TODO** : exit handlers (with `atexit`)
 
-(signal-handler :term)
-;=> NIL
-;   NIL
-
-;; Setting a signal handler.
-(setf (signal-handler :term) #'exit-on-signal)
-;=> #<FUNCTION (LAMBDA (SIGNO)) {1005764E3B}>
-
-(signal-handler :term)
-;=> #<FUNCTION (LAMBDA (SIGNO)) {1005764E3B}>
-;   T
-
-;; Removing a signal handler.
-(remove-signal-handler :term)
-;=> T
-
-;; Clearing all signal handlers.
-(remove-all-signal-handlers)
-```
-
-## Requirements
-
+**Requirements** :
 * [CFFI](http://common-lisp.net/project/cffi/)
+* [Bordeaux-threads](http://trac.common-lisp.net/bordeaux-threads/wiki/ApiDocumentation)
 
-## Installation
-
+**Installation** :
 ```
 cd ~/common-lisp/
-git clone https://github.com/fukamachi/trivial-signal.git
+git clone https://github.com/guicho2.71828/trivial-signal.git
 ```
 
 ```common-lisp
 (ql:quickload :trivial-signal)
 ```
 
-## Exported Symbols
-
-### [Function] signal-handler (signal)
-
-This returns a signal handler for a signal `SIGNAL`.
-
-`SIGNAL` can be either a keyword or an integer.
+## Usage : Toplevel Handlers
 
 ```common-lisp
-(signal-handler :term)
-(signal-handler 15)
-(signal-handler +sigterm+)
+(use-package :trivial-signal)
+(defun exit-on-signal (signo)
+  (format *error-output* "~&received ~A~%" (signal-name signo))
+  (sb-ext:exit :code 1 :abort t))
+(setf (signal-handler :term) #'exit-on-signal) ;; :term can also be :sigterm or 15
+
+(loop (sleep 3))
+
+;; now run `kill -15 $PID` on the terminal to run `exit-on-signal`
 ```
 
-### [Function] \(setf signal-handler) (fn signal)
+Above example shows the usage of **toplevel handlers**.
+Toplevel handlers are system wide and (in most cases) static.
 
-This sets a signal handler `FN` for a signal `SIGNAL`.
+## Usage: SIGNAL-HANDLER-BIND
 
-`FN` must be a function or a symbol of a function name, which takes one argument as a signal number.
+The next important usage of trivial-signal is
+to establish handlers dynamically by `signal-handler-bind`.
+The scope of this kind of signal handlers are thread-local.
 
-```common-lisp
-(setf (signal-handler :term)
-      #'(lambda (signo)
-          (princ (signal-name signo) *error-output*)))
+When the main process receives a signal,
+handlers are called in the same way as in `handler-bind` : the
+top handler in the innermost `signal-handler-bind` is called first.
+
+```COMMON-LISP
+(use-package :trivial-signal)
+
+(tagbody
+  (signal-handler-bind ((15 (lambda (c) (print :first)))
+                        (15 (lambda (c) (print :escaping) (go :escape)))
+                        ;; mixing different handlers is ok
+                        (2  (lambda (c) (print :escaping) (go :escape)))
+                        ;; once the signal is handled, remaining handlers are not called
+                        (15 (lambda (c) (print :this-should-not-be-called))))
+    (loop (sleep 3))) ;; now send signal 15 from the terminal
+  :escape
+  (print :success!))
+
+(tagbody
+  ;; nested handlers are called from the most recently established ones.
+  ;; If the handler declines, the next innermost one is called.
+  (signal-handler-bind ((15 (lambda (c) (print :this-should-not-be-called))))
+    (signal-handler-bind ((15 (lambda (c) (print :escaping) (go :escape))))
+      (signal-handler-bind ((15 (lambda (c) (print :most-recent))))
+        (loop (sleep 3)))))
+  :escape
+  (print :success!))
 ```
 
-### [Function] remove-signal-handler (signal)
+If all these thread-local handlers decline, then the toplevel handlers are called.
+If that declines again, then a common-lisp condition `unix-signal` is
+signaled in that context.
 
-This removes a signal handler from a signal `SIGNAL`.
+# Signal Handling Internal
 
-### [Function] remove-all-signal-handlers ()
+Signals are handled by C-level posix `signal(8)` API
+with which we set a low-level handler through CFFI.
+The signal sent to the main process are sent to this lisp function,
+which interrupts each thread who has
+thread-local signal handlers established by `signal-handler-bind`.
 
-This clears all signal handlers.
+## Threading Policy
 
-### [Macro] with-signal-handler (signal fn &body forms)
+Signals directly sent to each thread might not be captured by `trivial-signal`.
+We haven't test that yet. Our advise is that they should be sent to the main process.
 
-This executes `FORMS` in an environment where a signal handler `FN` for a signal `SIGNAL` is in effect.
+Also note that, depending on the lisp implementation, only the part of
+signals can be captured. This is because those implementations use signals
+internally for their own sake (such as thread manipulation). For example,
 
-```common-lisp
-(with-signal-handler :term (lambda (signo)
-                             (declare (ignore signo))
-                             (sb-ext:exit :abort t))
-  ;; do something.
-  )
-```
++ SBCL on x86_64 can capture 4-8, 10, 11, 16, 18, 21, 22, 30, 31 (maybe inaccurate?)
++ CCL on x86_64 can capture 20-22, 27, 29
 
-### [Macro] signal-handler-bind (bindings &body forms)
+# API
+## sigspec API
 
-This executes `FORMS` in an environment where signal handler bindings are in effect.
+Signals can be either specified by its number or by its name.
+In `trivial-signal`, the name can be specified with keywords.
+Below examples should be sufficient :
 
-```common-lisp
-(signal-handler-bind ((:term (lambda (signo)
-                               (declare (ignore signo))
-                               (sb-ext:exit :abort t)))
-                      (:int  (lambda (signo)
-                               (princ (signal-name signo) *error-output*))))
-  ;; do something.
-  )
-```
++ 15, :term, :sigterm (additionally, constant `+sigterm+` is bound to 15)
++ 2,  :int,  :sigint  (additionally, constant `+sigint+`  is bound to 2 )
++ 24, :xcpu, :sigxcpu (additionally, constant `+sigxcpu+` is bound to 24)
+
+Note that the signal number actually depends on the OS you are using.
+Currently we hard-coded the signal number and its names, but in the future
+this would be replaced by the information obtained with `cffi-grovel`.
 
 ### [Function] signal-name (signo)
 
@@ -123,10 +131,136 @@ This returns the number of `SIGNAME` as an integer.
 (signal-number :term)
 ;=> 15
 ```
+## Thread-local handlers API
+
+#### [Macro] signal-handler-bind ([(sigspec handler)]* &body forms)
+
+This executes `FORMS` in an environment where signal handler bindings are in effect.
+
+```common-lisp
+(signal-handler-bind ((:term (lambda (signo)
+                               (declare (ignore signo))
+                               (sb-ext:exit :abort t)))
+                      (:int  (lambda (signo)
+                               (princ (signal-name signo) *error-output*))))
+  ;; do something.
+  )
+```
+
+#### [Function] call-signal-handler-bind (new-signal-handlers fn)
+
+Run FN in a dynamic environment where the signal handler bindings are
+in effect. `new-signal-handlers` is a cons tree of ((signo handler ...) ...).
+This is rather an internal function which signal-handler-bind expands into.
+Use this function when you want to dynamically alter the signal to be captured.
+
+Note that, trivial-signal only considers the first appearance of (signo handlers...)
+with the matching signo in the same layer. For example,
+
+    (call-signal-handler-bind
+     `((,*signo* ,(lambda (c) (lprint :first))
+                 ,(lambda (c) (lprint :escaping) (go :escape))
+                 ,(lambda (c) (lprint :this-should-not-be-called))))
+     (lambda () ...))
+
+is okay but
+
+    (call-signal-handler-bind
+     `((,*signo* ,(lambda (c) (lprint :first)))
+       (,*signo* ,(lambda (c) (lprint :escaping) (go :escape)))
+       (,*signo* ,(lambda (c) (lprint :this-should-not-be-called))))
+     (lambda () ... ))
+
+is incorrect (the 2nd and 3rd handlers are ignored).
+If you want to do it, wrap the main code in the `(lambda () ...)`
+with another call-signal-handler-bind.
+(Also, the macro `signal-handler-bind` automatically solve this.)
+
+#### [Macro] with-signal-handler (signal fn &body forms)
+
+(deprecated)
+This executes `FORMS` in an environment where a signal handler `FN` for a signal `SIGNAL` is in effect.
+
+
+```common-lisp
+(with-signal-handler :term (lambda (signo)
+                             (declare (ignore signo))
+                             (sb-ext:exit :abort t))
+  ;; do something.
+  )
+```
+
+## Toplevel handlers
+
+Toplevel handlers are system wide, global handlers that capture the signals
+sent to the main process.
+The functionality of the toplevel signal handlers are analogous to `*debugger-hook*`.
+When the lisp process receives a signal,
+it is handled by these toplevel handlers 
+**unless** some nested signal handlers (described later) handles it.
+
+```common-lisp
+(use-package :trivial-signal)
+(defun exit-on-signal (signo)
+  (format *error-output* "~&received ~A~%" (signal-name signo))
+  (sb-ext:exit :code 1 :abort t))
+
+(signal-handler :term) ;=> NIL
+(setf (signal-handler :term) #'exit-on-signal)
+;=> #<FUNCTION (LAMBDA (SIGNO)) {1005764E3B}>
+
+(signal-handler :term)
+;=> #<FUNCTION (LAMBDA (SIGNO)) {1005764E3B}>
+;   T
+
+;; Removing a signal handler.
+(setf (signal-handler :term) nil) ; or: (remove-signal-handler :term) (deprecated)
+;=> T
+
+;; Clearing all signal handlers.
+(remove-all-signal-handlers)
+```
+
+#### [Function] signal-handler (signal)
+
+This returns a signal handler for a signal `SIGNAL`.
+
+`SIGNAL` can be either a keyword or an integer.
+
+```common-lisp
+(signal-handler :term)
+(signal-handler 15)
+(signal-handler +sigterm+)
+```
+
+#### [Function] \(setf signal-handler) (fn signal)
+
+This sets a signal handler `FN` for a signal `SIGNAL`.
+
+`FN` must be a function or a symbol of a function name, which takes one
+argument as a signal number.
+Otherwise `FN` should be `NIL`, indicating the handler should be removed.
+
+```common-lisp
+(setf (signal-handler :term)
+      #'(lambda (signo)
+          (princ (signal-name signo) *error-output*)))
+```
+
+#### [Function] remove-signal-handler (signal)
+
+(deprecated) This removes a signal handler from a signal `SIGNAL`.
+
+#### [Function] remove-all-signal-handlers ()
+
+This clears all signal handlers.
+
+
 
 ## Author
 
-* Eitaro Fukamachi (e.arrows@gmail.com)
+* Eitaro Fukamachi (e.arrows@gmail.com) (author)
+* Masataro Asai (guicho2.71828@gmai.com) (maintainer)
 
 ## License
 

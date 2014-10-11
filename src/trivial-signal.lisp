@@ -138,46 +138,73 @@ Toplevel handlers can hold at most one handler for the same signal."
 ;; http://www.sbcl.org/sbcl-internals/index.html)
 
 #+debug
-(defvar *print-lock* (bt:make-lock "print-lock"))
+(defvar *handler-lock* (bt:make-lock "handler-lock")
+  "force the handler processing to be synchronous")
 
 (define-condition unix-signal ()
   ((signo :initarg :signo :reader signo))
   (:report (lambda (c s)
              (format s "~&received ~A~%" (signal-name (signo c))))))
 
+(defvar *listener-threads* (make-hash-table))
+(defvar *listener-threads-lock* (bt:make-lock "listener-threads"))
+
 (cffi:defcallback call-signal-handler-in-lisp :void ((signo :int))
-  #+debug
-  (bt:with-lock-held (*print-lock*)
-    (format t "~&signo: ~a" signo)
-    (format t "~&all threads: ~a" (bt:all-threads))
-    (format t "~&current thread: ~a" (bt:current-thread))
-    (force-output))
-  (dolist (th (bt:all-threads))
-    (bt:interrupt-thread th #'invoke-handlers signo)))
+  ;; in SBCL, singals are sent only to the main thread.
+  ;; in CCL, signals are sometimes sent to all threads (subprocesses)
+  ;; (in which case call-signal-handler-in-lisp is called multiple times)
+  ;; and sometimes only to the main thread.
+  (when
+      #+(or sbcl ccl)
+      (string=
+       #+sbcl "main thread"
+       #+ccl "Initial"
+       (bt:thread-name (bt:current-thread)))
+      #-(or sbcl ccl)
+      t
+    #+debug
+    (bt:with-lock-held (*handler-lock*)
+      (format t "~&received signo: ~a" signo)
+      (format t "~&all threads: ~a" (bt:all-threads))
+      (format t "~&current thread: ~a" (bt:current-thread))
+      (force-output))
+    (dolist (th (bt:all-threads)) ;; only the live threads
+      #+debug
+      (bt:with-lock-held (*handler-lock*)
+        (format t "~&th: ~a result: ~a"
+                th (gethash th *listener-threads*))
+        #+ccl
+        (print (ccl::lisp-thread.interrupt-functions th)))
+      (when (gethash th *listener-threads*)
+        (bt:interrupt-thread
+         th
+         (lambda ()
+           (invoke-handlers signo)))))))
 
 (defun invoke-handlers (signo)
   "Handler-invoking procedure per thread"
-  #+debug
-  (bt:with-lock-held (*print-lock*)
+  (;; #+debug bt:with-lock-held #+debug (*handler-lock*)
+   ;; #-debug
+   progn
     (format t "~&-------- handler invoked in thread: ~a -------"
             (bt:thread-name (bt:current-thread)))
     (format t "~&hierarchy: ~a" *signal-handler-hierarchy*)
-    (force-output))
-  (dolist (handlers/layer *signal-handler-hierarchy*)
-    (let ((handlers/signo (assocdr signo handlers/layer)))
+    (force-output)
+    (dolist (handlers/layer *signal-handler-hierarchy*)
+      (let ((handlers/signo (assocdr signo handlers/layer)))
+        (when handlers/signo
+          (dolist (handler handlers/signo)
+            (funcall handler signo)))))
+    ;; if they all declines, call the toplevel handlers
+    (let ((handlers/signo (assocdr signo *toplevel-signal-handlers*)))
       (when handlers/signo
         (dolist (handler handlers/signo)
-          (funcall handler signo)))))
-  ;; if they all declines, call the toplevel handlers
-  (let ((handlers/signo (assocdr signo *toplevel-signal-handlers*)))
-    (when handlers/signo
-      (dolist (handler handlers/signo)
-        (funcall handler signo))))
-  ;; if all handlers have declined, then invoke the debugger
-  (restart-case
-      (error 'unix-signal :signo signo)
-    (ignore ()
-      :report "ignore this unix signal.")))
+          (funcall handler signo))))
+    ;; if all handlers have declined, then invoke the debugger
+    (restart-case
+        (error 'unix-signal :signo signo)
+      (ignore ()
+        :report "ignore this unix signal."))))
 
 (defun %enable-signal-handler (signo)
   (check-type signo integer)
@@ -204,11 +231,16 @@ Toplevel handlers can hold at most one handler for the same signal."
 ;; TODO : sbcl's handler-bind turns (lambda ... ) in the handler definition
 ;; into locally-defined, dynamic-extent function (for optimization).
 
+(defvar *listening-signal-p* nil
+  "per-thread flag for whether the current thread is listening signals")
+
 (defmacro signal-handler-bind (bindings &body forms)
-  "Execute FORMS in a dynamic environment where signal handler bindings are in effect."
+  "Execute FORMS in a dynamic environment where signal handler bindings are
+in effect."
   (let ((next-enabled-signals (gensym))
         (new-signal-handlers (gensym))
-        (new-hierarchy (gensym)))
+        (new-hierarchy (gensym))
+        (th (gensym "BODY")))
     ;; we need a special care in these codes because it handles
     ;; asynchronous operations
     `(let* ((,new-signal-handlers ,(%inline-bindings bindings))
@@ -220,7 +252,7 @@ Toplevel handlers can hold at most one handler for the same signal."
             ;; ^^^ this is safe because the only function dependent on
             ;; *currently-enabled-signals* is %next-enabled-signals.
             (*signal-handler-hierarchy* ,new-hierarchy))
-       ;; <---- what happens if an interrupt for a signal X occurs right here?
+       ;; <-- what happens if an interrupt for a signal X occurs right here?
        ;;   (== the new hierarchy is set,
        ;;       but the newest handlers are not enabled yet)
        ;; 
@@ -231,15 +263,37 @@ Toplevel handlers can hold at most one handler for the same signal."
        ;;            |           | because they are already enabled
        (unwind-protect
            (progn
-             ;; Only the additional signals are enabled.
-             ;; It is possible that a new signal is received
-             ;; while partly enabling these signals before running ,@forms ...
+             (unless *listening-signal-p* ;; called only on the toplevel stack
+               #+debug
+               (bt:with-lock-held (*handler-lock*)
+                 (format t "~&Registering the current thread as a listener: ~a"
+                         (bt:current-thread))
+                 (force-output))
+               (bt:with-lock-held (*listener-threads-lock*)
+                 (setf (gethash (bt:current-thread) *listener-threads*) t)))
+             ;; Only the additional signals are enabled.  It is possible
+             ;; that a new signal is received while partly enabling these
+             ;; signals before running ,@forms ...
+             #+debug
+             (bt:with-lock-held (*handler-lock*)
+               (format t "~&Enabling signal handlers: ~a"
+                       (bt:current-thread)))
              (%enable-all-signal-handlers ,next-enabled-signals)
-             ,@forms)
+             (let* ((*listening-signal-p* t))
+               ,@forms))
          ;; however in any cases, the partly/fully enabled singals are
          ;; correctly disabled.
+         #+debug
+         (bt:with-lock-held (*handler-lock*)
+           (format t "~&Disabling signal handlers: ~a" (bt:current-thread)))
          (%disable-all-signal-handlers
-          ,next-enabled-signals)))))
+          ,next-enabled-signals)
+         (unless *listening-signal-p* ;; called only on the toplevel stack
+           #+debug
+           (bt:with-lock-held (*handler-lock*)
+             (format t "~&Removng the current thread as a listener: ~a" (bt:current-thread)))
+           (bt:with-lock-held (*listener-threads-lock*)
+             (remhash (bt:current-thread) *listener-threads*)))))))
 
 (defun group-bindings (bindings)
   "returns an alist of ((name handler1 handler2 ...)=cons ...)"

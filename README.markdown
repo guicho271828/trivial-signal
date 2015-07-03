@@ -7,6 +7,9 @@ Trivial-signal is a Common Lisp UNIX signal handling library.
 
 **News** : Maintainer has changed. Thanks Fukamachi! (Masataro Asai)
 
+**News** : It now uses CFFI-grovel to obtain the signal numbers. It now
+  recognizes much more signals e.g. SIGRTMIN. I hope it works even on SPARK !
+
 **TODO** : exit handlers (with `atexit`)
 
 **Requirements** :
@@ -124,8 +127,8 @@ Below examples should be sufficient :
 + 24, :xcpu, :sigxcpu (additionally, constant `+sigxcpu+` is bound to 24)
 
 Note that the signal number actually depends on the OS you are using.
-Currently we hard-coded the signal number and its names, but in the future
-this would be replaced by the information obtained with `cffi-grovel`.
+These numbers are obtained by `cffi-grovel`, therefore OS level
+compatibility is now fixed.
 
 ### [Function] signal-name (signo)
 

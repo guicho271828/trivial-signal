@@ -8,10 +8,14 @@
   :author "Eitaro Fukamachi"
   :license "Public Domain"
   :depends-on (:cffi :bordeaux-threads)
+  :defsystem-depends-on (:cffi-grovel)
   :components ((:module "src"
                 :components
-                ((:file "trivial-signal" :depends-on ("signals"))
-                 (:file "signals"))))
+                ((:file "packages")
+                 (:cffi-grovel-file :grovel)
+                 (:file "signals")
+                 (:file "trivial-signal"))
+                :serial t))
   :description "Unix signal handling library."
   :long-description
   #.(with-open-file (stream (merge-pathnames

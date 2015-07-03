@@ -3,8 +3,7 @@
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (pushnew :debug *features*))
 
-(asdf:compile-system (asdf:find-system :trivial-signal))
-;; (ql:quickload :trivial-signal)
+(ql:quickload :trivial-signal)
 
 (defpackage :ts-test-binding
   (:use :cl :trivial-signal :bt))

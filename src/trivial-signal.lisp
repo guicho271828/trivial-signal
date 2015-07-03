@@ -1,53 +1,4 @@
-(in-package :cl-user)
-(defpackage trivial-signal
-  (:use :cl
-        :trivial-signal.signals)
-  (:import-from :cffi
-                :defcallback
-                :foreign-funcall
-                :callback)
-  (:export :with-signal-handler
-           :signal-handler-bind
-           :call-signal-handler-bind
-           :signal-handler
-           :remove-signal-handler
-           :remove-all-signal-handlers
-           :unix-signal
-           :signo
 
-           :signal-name
-           :signal-number
-           :+sighup+
-           :+sigint+
-           :+sigquit+
-           :+sigill+
-           :+sigtrap+
-           :+sigabrt+
-           :+sigemt+
-           :+sigfpe+
-           :+sigkill+
-           :+sigbus+
-           :+sigsegv+
-           :+sigsys+
-           :+sigpipe+
-           :+sigalrm+
-           :+sigterm+
-           :+sigurg+
-           :+sigstop+
-           :+sigtstp+
-           :+sigcont+
-           :+sigchld+
-           :+sigttin+
-           :+sigttou+
-           :+sigio+
-           :+sigxcpu+
-           :+sigxfsz+
-           :+sigvtalrm+
-           :+sigprof+
-           :+sigwinch+
-           :+siginfo+
-           :+sigusr1+
-           :+sigusr2+))
 (in-package :trivial-signal)
 
 ;;;; hierarchical handler binding structure
@@ -103,14 +54,21 @@ list (alist signo (list functions)) == list (list (cons signo (list functions)))
       signal
       (signal-number signal)))
 
-;; you no longer able to explicitly access the current handlers.  However,
-;; instead, you can retrieve the toplevel handlers (analogous to calling
-;; *debugger-hook* before invoking a debugger when unhandled error has
-;; occured.)
-;; NOTE: unlike normal signal-handlers, toplevel handlers can hold at most one
-;; handler for the same signal.
 (defun signal-handler (signal)
-  "Returns the toplevel signal handler for a signal SIGNAL."
+  "Returns the toplevel signal handler for a signal SIGNAL.
+Toplevel handlers are system wide and (in most cases) static.
+Unlike normal signal handlers, toplevel handlers can hold at most one
+handler for the same signal.
+
+Example:
+
+ (use-package :trivial-signal)
+ (defun exit-on-signal (signo)
+   (format *error-output* \"~&received ~A~%\" (signal-name signo))
+   (sb-ext:exit :code 1 :abort t))
+ (setf (signal-handler :term) #'exit-on-signal) ;; :term can also be :sigterm or 15
+
+ (loop (sleep 3)) "
   (first (assocdr (canonical-signal-arg signal)
                   *toplevel-signal-handlers*)))
 
@@ -234,7 +192,7 @@ To remove the toplevel signal handler, (setf (signal-handler signo) nil) ."
 
 ;;;; macros
 
-;; TODO : sbcl's handler-bind turns (lambda ... ) in the handler definition
+;; TODO : sbcl's cl:handler-bind turns (lambda ... ) in the handler definition
 ;; into locally-defined, dynamic-extent function (for optimization).
 
 (defvar *listening-signal-p* nil
@@ -320,8 +278,27 @@ If you want to do it wrap the main code in (lambda () ...)
           (remhash (bt:current-thread) *listener-threads*))))))
 
 (defmacro signal-handler-bind (bindings &body forms)
-  "Execute FORMS in a dynamic environment where signal handler bindings are
-in effect."
+  "Execute FORMS in a dynamic environment where thread-local signal handler bindings are
+in effect.
+
+The syntax is almost identical to cl:handler-bind. Example:
+
+ (tagbody
+   (signal-handler-bind ((15 (lambda (c) (print :first)))
+                         (15 (lambda (c) (print :escaping) (go :escape)))
+                         (2  (lambda (c) (print :escaping) (go :escape)))
+                         (15 (lambda (c) (print :this-should-not-be-printed))))
+     (loop (sleep 3)))
+   :escape
+   (print :success!))
+
+Now send signal 15 to the main lisp process using the terminal. It should
+print :FIRST, :ESCAPING and :SUCCESS.
+
+ (Note: it does not work on some implementations, due to their
+ internals. In such cases, try another signal number, e.g. 10 !)
+
+"
   `(call-signal-handler-bind
     ,(%inline-bindings bindings)
     (lambda () ,@forms)))

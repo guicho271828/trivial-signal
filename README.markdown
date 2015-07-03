@@ -7,6 +7,9 @@ Trivial-signal is a Common Lisp UNIX signal handling library.
 
 **News** : Maintainer has changed. Thanks Fukamachi! (Masataro Asai)
 
+**News** : It now uses CFFI-grovel to obtain the signal numbers. It now
+  recognizes much more signals e.g. SIGRTMIN. I hope it works even on SPARK !
+
 **TODO** : exit handlers (with `atexit`)
 
 **Requirements** :
@@ -83,23 +86,34 @@ signaled in that context.
 
 Signals are handled by C-level posix `signal(8)` API
 with which we set a low-level handler through CFFI.
-The signal sent to the main process are sent to this lisp function,
-which interrupts each thread who has
-thread-local signal handlers established by `signal-handler-bind`.
+
+## Some Signals may not Work Right
+
+Note that, depending on the lisp implementation, some signals may not be
+captured. This is related to the implementations' internal, which may use
+signals internally for their own sake (such as thread manipulation).
+
+At least I checked the following signals work:
+
++ on SBCL x86_64, 4-8, 10-11, 16, 18, 21-22, 30-31, 34-64 (SIGRTMIN-SIGRTMAX)
+  + if you set a signal handler on 13 (SIGPIPE), sbcl hangs up
++ on CCL  x86_64, 1-3,6,8,10,12-14,16-18,21-24,26-29,31, 34-64 (SIGRTMIN-SIGRTMAX)
+
+To see which signals works on your environment, see [TESTING.org](https://github.com/guicho271828/trivial-signal/blob/master/TESTING.org)
 
 ## Threading Policy
 
+The C-level signal handlers call a lisp function, which interrupts each
+thread who has thread-local signal handlers established by
+`signal-handler-bind`.
+
 Signals directly sent to each thread might not be captured by `trivial-signal`.
-We haven't test that yet. Our advise is that they should be sent to the main process.
+The behavior is currently undefined.
+Our advise is that they should be sent to the main process.
 
-Also note that, depending on the lisp implementation, only the part of
-signals can be captured. This is because those implementations use signals
-internally for their own sake (such as thread manipulation). For example,
-
-+ SBCL on x86_64 can capture 4-8, 10, 11, 16, 18, 21, 22, 30, 31 (maybe inaccurate?)
-+ CCL on x86_64 can capture 1,2,3,6,8,10,12-14,16-18,21-24,26-29,31
-
-To see which signals works on your environment, see [TESTING.org](https://github.com/guicho271828/trivial-signal/blob/master/TESTING.org)
+This is again related to the internal behavior of the implementations.
+For example, on SBCL, signals sent to the main process are not
+distributed to each thread. However, CCL seems to distribute the signals.
 
 # API
 ## sigspec API
@@ -113,8 +127,8 @@ Below examples should be sufficient :
 + 24, :xcpu, :sigxcpu (additionally, constant `+sigxcpu+` is bound to 24)
 
 Note that the signal number actually depends on the OS you are using.
-Currently we hard-coded the signal number and its names, but in the future
-this would be replaced by the information obtained with `cffi-grovel`.
+These numbers are obtained by `cffi-grovel`, therefore OS level
+compatibility is now fixed.
 
 ### [Function] signal-name (signo)
 

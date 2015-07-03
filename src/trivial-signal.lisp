@@ -64,7 +64,7 @@ Example:
 
  (use-package :trivial-signal)
  (defun exit-on-signal (signo)
-   (format *error-output* "~&received ~A~%" (signal-name signo))
+   (format *error-output* \"~&received ~A~%\" (signal-name signo))
    (sb-ext:exit :code 1 :abort t))
  (setf (signal-handler :term) #'exit-on-signal) ;; :term can also be :sigterm or 15
 

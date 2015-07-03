@@ -37,7 +37,7 @@
 
 ;; not in posix
 
-(constant (+SIGIO+ "SIGIOT") :documentation "IOT trap. A synonym for SIGABRT. ")
+(constant (+SIGIOT+ "SIGIOT") :documentation "IOT trap. A synonym for SIGABRT. ")
 (constant (+SIGEMT+ "SIGEMT") :documentation "Emulate instruction executed. ")
 
 (constant (+SIGTKFLT+ "SIGTKFLT") :documentation "Stack fault on coprocessor (unused on linux)")

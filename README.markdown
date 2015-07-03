@@ -93,6 +93,7 @@ signals internally for their own sake (such as thread manipulation).
 At least I checked the following signals work:
 
 + on SBCL x86_64, 4-8, 10-11, 16, 18, 21-22, 30-31, 34-64 (SIGRTMIN-SIGRTMAX)
+  + if you set a signal handler on 13 (SIGPIPE), sbcl hangs up
 + on CCL  x86_64, 1-3,6,8,10,12-14,16-18,21-24,26-29,31, 34-64 (SIGRTMIN-SIGRTMAX)
 
 To see which signals works on your environment, see [TESTING.org](https://github.com/guicho271828/trivial-signal/blob/master/TESTING.org)

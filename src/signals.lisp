@@ -1,16 +1,6 @@
 
 (in-package :trivial-signal.signals)
 
-;; (defun signal-name (signo)
-;;   "Return the name of SIGNO as a keyword."
-;;   (ecase signo
-;;     ,@signal-name-rules))
-;; 
-;; (defun signal-number (signame)
-;;   "Return the number of SIGNAME as an integer."
-;;   (ecase signame
-;;     ,@signal-num-rules))
-
 (defvar *signal-keyword* (make-hash-table))
 
 (defun constant->keyword (symbol)

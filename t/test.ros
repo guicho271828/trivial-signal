@@ -1,0 +1,109 @@
+#!/bin/sh
+#|-*- mode:lisp -*-|#
+#|
+exec ros -Q -- $0 "$@"
+|#
+
+(ql:quickload :trivial-signal :silent t)
+(defpackage :ts-test-binding
+  (:use :cl :trivial-signal :bt))
+(in-package :ts-test-binding)
+
+(defvar *signo*)
+(defvar *shared* *standard-output*)
+(defvar *print-lock* (make-lock "print-test"))
+(defun lprint (thing)
+  (print thing *shared*))
+
+(defun waitloop (i sig)
+  ;;(lprint trivial-signal::*signal-handler-hierarchy*)
+  (loop (sleep 1)
+        (format t "waiting signal ~a (step ~a) on ~a"
+                sig i (current-thread))))
+
+(defvar *pid*
+    (parse-integer
+     (uiop:run-program "echo $PPID" :output :string)
+     :junk-allowed t))
+
+;;;; macro version
+
+(defmacro run1 ()
+  `(tagbody
+     (signal-handler-bind
+      ((,*signo* (lambda (c) (declare (ignore c)) (lprint :first)))
+       (,*signo* (lambda (c) (declare (ignore c)) (lprint :escaping) (go :escape)))
+       (,*signo* (lambda (c) (declare (ignore c)) (lprint :this-should-not-be-called))))
+      (waitloop 1 ,*signo*))
+     :escape))
+(defmacro run2 ()
+  `(tagbody
+     (signal-handler-bind
+      ((,*signo* (lambda (c) (declare (ignore c)) (lprint :escaping) (go :escape))))
+      (waitloop 2 ,*signo*))
+     :escape))
+(defmacro run3 ()
+  `(tagbody
+     (signal-handler-bind ((,*signo* (lambda (c) (declare (ignore c)) (lprint :should-not-be-called))))
+       (signal-handler-bind ((,*signo* (lambda (c) (declare (ignore c)) (lprint :escaping) (go :escape))))
+         (signal-handler-bind ((,*signo* (lambda (c) (declare (ignore c)) (lprint :inner))))
+           (waitloop 3 ,*signo*))))
+     :escape))
+
+;;;; dynamic version
+
+(defun run4 ()
+  (tagbody
+    (call-signal-handler-bind
+     `((,*signo* ,(lambda (c) (declare (ignore c)) (lprint :first))
+                 ,(lambda (c) (declare (ignore c)) (lprint :escaping) (go :escape))
+                 ,(lambda (c) (declare (ignore c)) (lprint :this-should-not-be-called))))
+     (lambda () (waitloop 4 *signo*)))
+    :escape))
+(defun run5 ()
+  (tagbody
+    (call-signal-handler-bind
+     `((,*signo* ,(lambda (c) (declare (ignore c)) (lprint :escaping) (go :escape))))
+     (lambda () (waitloop 5 *signo*)))
+    :escape))
+(defun run6 ()
+  (tagbody
+    (call-signal-handler-bind
+     `((,*signo* ,(lambda (c) (declare (ignore c)) (lprint :should-not-be-called))))
+     (lambda ()
+       (call-signal-handler-bind
+        `((,*signo* ,(lambda (c) (declare (ignore c)) (lprint :escaping) (go :escape))))
+        (lambda ()
+          (call-signal-handler-bind
+           `((,*signo* ,(lambda (c) (declare (ignore c)) (lprint :inner))))
+           (lambda () (waitloop 6 *signo*)))))))
+    :escape))
+
+;;;; main
+
+(defun main (target signo &rest argv)
+  (declare (ignorable argv))
+  (format t "~&main thread pid: ~a~&" *pid*)
+  (setf *signo* (parse-integer signo :junk-allowed t)) ;; should be a global binding
+  (let ((runner
+         (bt:make-thread
+          (lambda ()
+            (let ((*package* (find-package :ts-test-binding)))
+              (eval `(,(read-from-string target)))))))
+        (killer
+         (make-thread
+          (lambda ()
+            (loop repeat 5
+                  do
+               (sleep 1)
+               (format *shared* "~&sending signal ~a to pid ~a" *signo* *pid*)
+               (uiop:run-program (format nil "kill -s ~a ~a" *signo* *pid*)))))))
+    (declare (ignorable killer))
+    (loop repeat 5
+          do
+       (sleep 1)
+       (unless (bt:thread-alive-p runner)
+         (terpri)
+         (uiop:quit 0)))
+    (terpri)
+    (uiop:quit 1)))

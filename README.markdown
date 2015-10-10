@@ -1,4 +1,4 @@
-# trivial-signal
+# trivial-signal [![Build Status](https://travis-ci.org/guicho271828/trivial-signal.svg)](https://travis-ci.org/guicho271828/trivial-signal)
 
 Trivial-signal is a Common Lisp UNIX signal handling library.
 

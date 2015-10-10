@@ -8,6 +8,12 @@ then
     TIMEOUT=gtimeout
 fi
 
+if [[ $LISP == abcl ]]
+then
+    timelimit=180
+else
+    timelimit=30
+fi
 results=
 
 finalize (){
@@ -27,7 +33,7 @@ run-test (){
     done
     for target in run{1..6}
     do
-        if $TIMEOUT -s 9 10 t/test.ros $target $1
+        if $TIMEOUT -s 9 $timelimit t/test.ros $target $1
         then
             echo "✔ t/test.ros $target $1"
         else

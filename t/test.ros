@@ -4,7 +4,7 @@
 exec ros -Q -- $0 "$@"
 |#
 
-(ql:quickload :trivial-signal)
+(ql:quickload :trivial-signal :silent t)
 (defpackage :ts-test-binding
   (:use :cl :trivial-signal :bt))
 (in-package :ts-test-binding)

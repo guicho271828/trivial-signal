@@ -40,5 +40,5 @@ cache:
     - $HOME/.config/common-lisp
 
 script:
-  - test.sh
+  - ./test.sh
 

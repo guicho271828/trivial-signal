@@ -38,7 +38,7 @@ matrix:
 
 install:
   - curl -L https://raw.githubusercontent.com/snmsts/roswell/release/scripts/install-for-ci.sh | sh
-  - [ $TRAVIS_OS_NAME == osx ] || brew install coreutils
+  - [ $TRAVIS_OS_NAME = osx ] && brew install coreutils
 
 cache:
   directories:

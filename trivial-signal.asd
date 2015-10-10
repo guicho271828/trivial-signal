@@ -5,7 +5,7 @@
 
 (cl:eval-when (:load-toplevel :execute)
   #+quicklisp
-  (ql:quickload :cffi-grovel))
+  (ql:quickload :cffi-grovel :silent t))
 
 (defsystem trivial-signal
   :version "0.1.0"

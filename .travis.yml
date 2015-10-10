@@ -1,6 +1,10 @@
 language: common-lisp
 sudo: false
 
+os:
+  - linux
+  - osx
+
 addons:
   apt:
     packages:
@@ -25,6 +29,7 @@ env:
 
 matrix:
   allow_failures:
+    - os: osx
     - env: LISP=clisp
     - env: LISP=abcl
     - env: LISP=ecl

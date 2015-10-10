@@ -1,5 +1,13 @@
 #!/bin/bash
 
+if which timeout
+then
+    TIMEOUT=timeout
+elif which gtimeout
+then
+    TIMEOUT=gtimeout
+fi
+
 results=
 
 finalize (){
@@ -19,7 +27,7 @@ run-test (){
     done
     for target in run{1..6}
     do
-        if timeout -s 9 10 t/test.ros $target $1
+        if $TIMEOUT -s 9 10 t/test.ros $target $1
         then
             echo "✔ t/test.ros $target $1"
         else

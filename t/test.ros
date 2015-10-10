@@ -93,13 +93,13 @@ exec ros -Q -- $0 "$@"
         (killer
          (make-thread
           (lambda ()
-            (loop repeat 30
+            (loop repeat 5
                   do
                (sleep 1)
                (format *shared* "~&sending signal ~a to pid ~a" *signo* *pid*)
                (uiop:run-program (format nil "kill -s ~a ~a" *signo* *pid*)))))))
     (declare (ignorable killer))
-    (loop repeat 30
+    (loop repeat 5
           do
        (sleep 1)
        (unless (bt:thread-alive-p runner)

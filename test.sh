@@ -19,7 +19,7 @@ run-test (){
     done
     for target in run{1..6}
     do
-        if t/test.ros $target $1
+        if timeout -s 9 31 t/test.ros $target $1
         then
             echo "✔ t/test.ros $target $1"
         else

@@ -9,10 +9,6 @@
   (:use :cl :trivial-signal :bt :iterate))
 (in-package :ts-test-binding)
 
-(defvar *pid*
-    #+sbcl (sb-posix:getpid)
-    #+ccl (ccl::getpid))
-
 (defvar *signo*
     (read-from-string
      (first uiop:*command-line-arguments*)))

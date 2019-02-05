@@ -1,6 +1,6 @@
 (in-package :cl-user)
 
-(defpackage trivial-signal.signals
+(defpackage :trivial-signal.signals
   (:use :cl)
   (:export :+sighup+ :+sigint+ :+sigquit+ :+sigill+ :+sigtrap+
            :+sigabrt+ :+sigemt+ :+sigfpe+ :+sigkill+ :+sigbus+
@@ -15,7 +15,7 @@
            :signal-name
            :signal-number))
 
-(defpackage trivial-signal
+(uiop:define-package :trivial-signal
   (:use :cl
         :trivial-signal.signals)
   (:import-from :cffi
@@ -29,14 +29,5 @@
            :remove-signal-handler
            :remove-all-signal-handlers
            :unix-signal
-           :signo
-           :signal-name
-           :signal-number
-
-           :+sighup+ :+sigint+ :+sigquit+ :+sigill+ :+sigtrap+
-           :+sigabrt+ :+sigemt+ :+sigfpe+ :+sigkill+
-           :+sigbus+ :+sigsegv+ :+sigsys+ :+sigpipe+ :+sigalrm+
-           :+sigterm+ :+sigurg+ :+sigstop+ :+sigtstp+ :+sigcont+
-           :+sigchld+ :+sigttin+ :+sigttou+ :+sigio+ :+sigxcpu+
-           :+sigxfsz+ :+sigvtalrm+ :+sigprof+ :+sigwinch+ :+siginfo+
-           :+sigusr1+ :+sigusr2+))
+           :signo)
+  (:reexport :trivial-signal.signals))

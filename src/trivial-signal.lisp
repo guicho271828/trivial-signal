@@ -150,9 +150,12 @@ To remove the toplevel signal handler, (setf (signal-handler signo) nil) ."
   (;; #+debug bt:with-lock-held #+debug (*handler-lock*)
    ;; #-debug
    progn
+    #+debug
     (format t "~&-------- handler invoked in thread: ~a -------"
             (bt:thread-name (bt:current-thread)))
+    #+debug
     (format t "~&hierarchy: ~a" *signal-handler-hierarchy*)
+    #+debug
     (force-output)
     (dolist (handlers/layer *signal-handler-hierarchy*)
       (let ((handlers/signo (assocdr signo handlers/layer)))

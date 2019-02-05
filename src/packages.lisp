@@ -7,7 +7,10 @@
            :+sigsegv+ :+sigsys+ :+sigpipe+ :+sigalrm+ :+sigterm+
            :+sigurg+ :+sigstop+ :+sigtstp+ :+sigcont+ :+sigchld+
            :+sigttin+ :+sigttou+ :+sigio+ :+sigxcpu+ :+sigxfsz+
-           :+sigvtalrm+ :+sigprof+ :+sigwinch+ :+siginfo+ :+sigusr1+ :+sigusr2+
+           :+sigvtalrm+ :+sigprof+ :+sigwinch+ :+siginfo+ :+sigusr1+
+           :+sigusr2+ :+sigpoll+ :+sigiot+ :+sigtkflt+ :+sigcld+
+           :+sigpwr+ :+siglost+ :+sigunused+ :+sigrtmin+ :+sigrtmax+
+           :+sigthr+ :+siglibrt+
 
            :signal-name
            :signal-number))

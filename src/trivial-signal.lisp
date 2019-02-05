@@ -104,10 +104,6 @@ To remove the toplevel signal handler, (setf (signal-handler signo) nil) ."
 ;; to malfunction.  (6. Signal handling,
 ;; http://www.sbcl.org/sbcl-internals/index.html)
 
-#+debug
-(defvar *handler-lock* (bt:make-lock "handler-lock")
-  "force the handler processing to be synchronous")
-
 (define-condition unix-signal ()
   ((signo :initarg :signo :reader signo))
   (:report (lambda (c s)
@@ -129,34 +125,13 @@ To remove the toplevel signal handler, (setf (signal-handler signo) nil) ."
        (bt:thread-name (bt:current-thread)))
       #-(or sbcl ccl)
       t
-    #+debug
-    (bt:with-lock-held (*handler-lock*)
-      (format t "~&received signo: ~a" signo)
-      (format t "~&all threads: ~a" (bt:all-threads))
-      (format t "~&current thread: ~a" (bt:current-thread))
-      (force-output))
     (dolist (th (bt:all-threads)) ;; only the live threads
-      #+debug
-      (bt:with-lock-held (*handler-lock*)
-        (format t "~&th: ~a result: ~a"
-                th (gethash th *listener-threads*))
-        #+ccl
-        (print (ccl::lisp-thread.interrupt-functions th)))
       (when (gethash th *listener-threads*)
         (bt:interrupt-thread th #'invoke-handlers signo)))))
 
 (defun invoke-handlers (signo)
   "Handler-invoking procedure per thread"
-  (;; #+debug bt:with-lock-held #+debug (*handler-lock*)
-   ;; #-debug
-   progn
-    #+debug
-    (format t "~&-------- handler invoked in thread: ~a -------"
-            (bt:thread-name (bt:current-thread)))
-    #+debug
-    (format t "~&hierarchy: ~a" *signal-handler-hierarchy*)
-    #+debug
-    (force-output)
+  (progn
     (dolist (handlers/layer *signal-handler-hierarchy*)
       (let ((handlers/signo (assocdr signo handlers/layer)))
         (when handlers/signo
@@ -245,20 +220,11 @@ If you want to do it wrap the main code in (lambda () ...)
     (unwind-protect
         (progn
           (unless *listening-signal-p* ;; called only on the toplevel stack
-            #+debug
-            (bt:with-lock-held (*handler-lock*)
-              (format t "~&Registering the current thread as a listener: ~a"
-                      (bt:current-thread))
-              (force-output))
             (bt:with-lock-held (*listener-threads-lock*)
               (setf (gethash (bt:current-thread) *listener-threads*) t)))
           ;; Only the additional signals are enabled.  It is possible
           ;; that a new signal is received while partly enabling these
           ;; signals before running ,@forms ...
-          #+debug
-          (bt:with-lock-held (*handler-lock*)
-            (format t "~&Enabling signal handlers: ~a"
-                    (bt:current-thread)))
           (%enable-all-signal-handlers next-enabled-signals)
           (let* ((*listening-signal-p* t))
             #+ccl
@@ -268,15 +234,8 @@ If you want to do it wrap the main code in (lambda () ...)
             (funcall fn)))
       ;; however in any cases, the partly/fully enabled singals are
       ;; correctly disabled.
-      #+debug
-      (bt:with-lock-held (*handler-lock*)
-        (format t "~&Disabling signal handlers: ~a" (bt:current-thread)))
       (%disable-all-signal-handlers next-enabled-signals)
       (unless *listening-signal-p* ;; called only on the toplevel stack
-        #+debug
-        (bt:with-lock-held (*handler-lock*)
-          (format t "~&Removng the current thread as a listener: ~a"
-                  (bt:current-thread)))
         (bt:with-lock-held (*listener-threads-lock*)
           (remhash (bt:current-thread) *listener-threads*))))))
 

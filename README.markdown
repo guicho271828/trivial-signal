@@ -10,7 +10,7 @@ Trivial-signal is a Common Lisp UNIX signal handling library.
 **News** : It now uses CFFI-grovel to obtain the signal numbers. It now
   recognizes much more signals e.g. SIGRTMIN. I hope it works even on SPARK !
 
-**TODO** : exit handlers (with `atexit`)
+~**TODO**~ : exit handlers (with `atexit`) --> Consider [exit-hooks](https://github.com/ailisp/exit-hooks).
 
 **Requirements** :
 * [CFFI](http://common-lisp.net/project/cffi/)

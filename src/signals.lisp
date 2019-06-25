@@ -23,22 +23,24 @@
      ;; :hup
      (find-symbol (format nil "+SIG~a+" (symbol-name symbol)) p))))
 
-(loop
-   for i from (1+ +SIGRTMIN+)
-   for sym in '(+SIGRTMIN+1+ +SIGRTMIN+2+ +SIGRTMIN+3+
-                +SIGRTMIN+4+ +SIGRTMIN+5+ +SIGRTMIN+6+ +SIGRTMIN+7+ +SIGRTMIN+8+
-                +SIGRTMIN+9+ +SIGRTMIN+10+ +SIGRTMIN+11+ +SIGRTMIN+12+ +SIGRTMIN+13+
-                +SIGRTMIN+14+ +SIGRTMIN+15+)
-   do
-     (setf (symbol-value sym) i))
+(when (boundp '+SIGRTMIN+)
+  (loop
+    for i from (1+ +SIGRTMIN+)
+    for sym in '(+SIGRTMIN+1+ +SIGRTMIN+2+ +SIGRTMIN+3+
+                 +SIGRTMIN+4+ +SIGRTMIN+5+ +SIGRTMIN+6+ +SIGRTMIN+7+ +SIGRTMIN+8+
+                 +SIGRTMIN+9+ +SIGRTMIN+10+ +SIGRTMIN+11+ +SIGRTMIN+12+ +SIGRTMIN+13+
+                 +SIGRTMIN+14+ +SIGRTMIN+15+)
+    do
+       (setf (symbol-value sym) i)))
 
-(loop
-   for i downfrom (1- +SIGRTMAX+)
-   for sym in '(+SIGRTMAX-1+ +SIGRTMAX-2+ +SIGRTMAX-3+ +SIGRTMAX-4+ +SIGRTMAX-5+
-                +SIGRTMAX-6+ +SIGRTMAX-7+ +SIGRTMAX-8+ +SIGRTMAX-9+ +SIGRTMAX-10+
-                +SIGRTMAX-11+ +SIGRTMAX-12+ +SIGRTMAX-13+ +SIGRTMAX-14+ +SIGRTMAX-15+)
-   do
-     (setf (symbol-value sym) i))
+(when (boundp '+SIGRTMAX+)
+  (loop
+    for i downfrom (1- +SIGRTMAX+)
+    for sym in '(+SIGRTMAX-1+ +SIGRTMAX-2+ +SIGRTMAX-3+ +SIGRTMAX-4+ +SIGRTMAX-5+
+                 +SIGRTMAX-6+ +SIGRTMAX-7+ +SIGRTMAX-8+ +SIGRTMAX-9+ +SIGRTMAX-10+
+                 +SIGRTMAX-11+ +SIGRTMAX-12+ +SIGRTMAX-13+ +SIGRTMAX-14+ +SIGRTMAX-15+)
+    do
+       (setf (symbol-value sym) i)))
 
 
 (dolist (symbol '(
